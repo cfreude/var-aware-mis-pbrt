@@ -28,8 +28,10 @@ def run_and_time(args, workingDir, repeats=1):
     n = 0
 
     for k in range(repeats):
+        print(args, '...')
         p = Popen(args, cwd=workingDir, stdin=PIPE, stdout=PIPE, stderr=PIPE)
         output, err = p.communicate()
+        print(err)
 
         # Format of our implementation
         renderTime = re.findall(r'Total rendering time: (\d+\.\d+) seconds.', output.decode('utf-8'))
@@ -71,7 +73,7 @@ def run_and_time(args, workingDir, repeats=1):
     roundToN = lambda x, n: round(x, -int(math.floor(math.log10(x))) + (n-1))
     return (roundToN(mean, 3), 0.0 if repeats == 1 else roundToN(twoStandardDevs, 3))
 
-def run_tests(ref_name, ref_integrator, ref_sampler, tester_fn, scenes):
+def run_tests(ref_name, ref_integrator, ref_sampler, tester_fn, scenes, pbrt_path, out_path):
     filenames = []
     for scene_name, scene_desc in scenes.items():
         scene_path = scene_desc['path']
@@ -79,20 +81,25 @@ def run_tests(ref_name, ref_integrator, ref_sampler, tester_fn, scenes):
             os.makedirs('./' + scene_name)
 
         # load the scene template and render the reference (if it does not exist already)
-        with open(scene_path + scene_desc['template'], 'r') as f:
+        with open(os.path.join(scene_path, scene_desc['template']), 'r') as f:
             scene = f.read()
 
-        refpath = scene_name + '/' + ref_name
+        out_folder = os.path.join(out_path, scene_name)
+        if not os.path.exists(out_folder):
+            os.makedirs(out_folder)
+
+        refpath = os.path.join(out_folder, ref_name)        
+        scenefile_path = os.path.join(scene_path, 'scene.pbrtgen')
         if not os.path.isfile(refpath):
             sc = set_integrator(scene, ref_integrator)
             sc = set_sampler(sc, ref_sampler)
-            with open(scene_path + 'scene.pbrtgen', 'w') as f:
+            with open(scenefile_path, 'w') as f:
                 f.write(sc)
-            subprocess.call(['./pbrt', scene_path + 'scene.pbrtgen', '--outfile', refpath])
+            subprocess.call([pbrt_path, scenefile_path, '--outfile', refpath])
 
         filenames.append(refpath)
 
-        filenames.extend(tester_fn(scene_name, scene, scene_path))
+        filenames.extend(tester_fn(scene_name, scene, scenefile_path))
 
     return filenames
 
